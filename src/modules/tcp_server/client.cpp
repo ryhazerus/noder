@@ -18,7 +18,7 @@ Client::Client(int fileDescriptor) {
 
 bool Client::operator==(const Client & other) const {
     if ((this->_sockfd.get() == other._sockfd.get()) &&
-        (this->_ip == other._ip) ) {
+        (this->_id == other._id) ) {
         return true;
     }
     return false;
@@ -30,18 +30,18 @@ void Client::startListen() {
 }
 
 void Client::send(const char *msg, size_t msgSize) const {
-    const size_t numBytesSent = ::send(_sockfd.get(), (char *)msg, msgSize, 0);
+    // ::send may write only part of the buffer when the socket's send buffer is full,
+    // so keep going until everything is out
+    size_t totalSent = 0;
+    while (totalSent < msgSize) {
+        // MSG_NOSIGNAL: a client that already hung up gives EPIPE instead of a SIGPIPE that kills the server
+        const ssize_t numBytesSent = ::send(_sockfd.get(), msg + totalSent, msgSize - totalSent, MSG_NOSIGNAL);
 
-    const bool sendFailed = (numBytesSent < 0);
-    if (sendFailed) {
-        throw std::runtime_error(strerror(errno));
-    }
-
-    const bool notAllBytesWereSent = (numBytesSent < msgSize);
-    if (notAllBytesWereSent) {
-        char errorMsg[100];
-        sprintf(errorMsg, "Only %lu bytes out of %lu was sent to client", numBytesSent, msgSize);
-        throw std::runtime_error(errorMsg);
+        if (numBytesSent < 0) {
+            if (errno == EINTR) continue;
+            throw std::runtime_error(strerror(errno));
+        }
+        totalSent += static_cast<size_t>(numBytesSent);
     }
 }
 

@@ -17,6 +17,7 @@ namespace iron {
     private:
         FileDescriptor _sockfd;
         std::string _ip = "";
+        std::string _id = "";   // "ip:port", unique per connection
         std::atomic<bool> _isConnected;
         std::thread *_receiveThread = nullptr;
         client_event_handler_t _eventHandlerCallback;
@@ -34,6 +35,9 @@ namespace iron {
 
         void setIp(const std::string &ip) { _ip = ip; }
         std::string getIp() const { return _ip; }
+
+        void setId(const std::string &id) { _id = id; }
+        std::string getId() const { return _id; }
 
         void setEventsHandler(const client_event_handler_t &eventHandler) { _eventHandlerCallback = eventHandler; }
 

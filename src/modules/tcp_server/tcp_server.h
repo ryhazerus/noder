@@ -38,7 +38,7 @@ namespace iron {
         std::atomic<bool> _stopRemoveClientsTask;
 
         void publishClientMsg(const Client &client, const char* msg, size_t msgSize);
-        void publishClientDisconnected(const std::string& , const std::string &msg);
+        void publishClientDisconnected(const Client &client, const std::string &msg);
         pipe_ret_t waitForClient(uint32_t timeout);
         void clientEventHandler(const Client&, ClientEvent, const std::string &msg);
         void removeDeadClients();
@@ -56,7 +56,7 @@ namespace iron {
         std::string acceptClient(uint timeout);
         void subscribe(const server_observer_t &observer);
         pipe_ret_t sendToAllClients(const char *msg, size_t size);
-        pipe_ret_t sendToClient(const std::string &clientIP, const char* msg, size_t size);
+        pipe_ret_t sendToClient(const std::string &clientId, const char* msg, size_t size);
         pipe_ret_t close();
         void printClients();
 

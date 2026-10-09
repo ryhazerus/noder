@@ -60,22 +60,32 @@ void Core::acceptClient() {
 std::vector<Request> Core::parseRequests(const std::string &clientIP, const char *msg, size_t size) {
     std::vector<Request> out;
 
-    std::lock_guard<std::mutex> lock(buffersMutex_);
-    std::string &buf = buffers_[clientIP];
-    buf.append(msg, size);
+    // under the lock: only move the complete lines out of the buffer.
+    // JSON parsing happens after, so other clients aren't kept waiting on it
+    std::string complete;
+    {
+        std::lock_guard<std::mutex> lock(buffersMutex_);
+        std::string &buf = buffers_[clientIP];
+        buf.append(msg, size);
 
-    // Guard against a client that never sends a newline
-    constexpr size_t kMaxBuffer = 1 << 20;   // 1 MB
-    if (buf.size() > kMaxBuffer) {
-        std::cerr << "Buffer overflow from " << clientIP << ", dropping data\n";
-        buf.clear();
-        return out;
+        // Guard against a client that never sends a newline
+        constexpr size_t kMaxBuffer = 1 << 20;   // 1 MB
+        if (buf.size() > kMaxBuffer) {
+            std::cerr << "Buffer overflow from " << clientIP << ", dropping data\n";
+            buf.clear();
+            return out;
+        }
+
+        const size_t lastNewline = buf.rfind('\n');
+        if (lastNewline == std::string::npos) return out;
+        complete = buf.substr(0, lastNewline + 1);
+        buf.erase(0, lastNewline + 1);
     }
 
     size_t pos;
-    while ((pos = buf.find('\n')) != std::string::npos) {
-        std::string line = buf.substr(0, pos);
-        buf.erase(0, pos + 1);
+    while ((pos = complete.find('\n')) != std::string::npos) {
+        std::string line = complete.substr(0, pos);
+        complete.erase(0, pos + 1);
 
         if (line.empty()) continue;
         if (line.back() == '\r') line.pop_back();   // tolerate \r\n
@@ -90,7 +100,7 @@ std::vector<Request> Core::parseRequests(const std::string &clientIP, const char
             std::cerr << "Invalid command from " << clientIP << ": " << e.what() << "\n";
         }
     }
-    return out;   // anything after the last '\n' stays in buf for next time
+    return out;   // anything after the last '\n' stayed in buffers_ for next time
 }
 
 void Core::onIncomingRequest(const std::string &clientIP, const Request &req) {
