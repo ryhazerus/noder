@@ -1,5 +1,8 @@
+#include <cstdlib>
+#include <iostream>
 #include <memory>
 #include <signal.h>
+#include <thread>
 
 #include "modules/core/Core.h"
 
@@ -13,7 +16,12 @@ auto main(int argc, char *argv[]) -> int {
     sigaddset(&signals, SIGTERM);
     pthread_sigmask(SIG_BLOCK, &signals, nullptr);
 
-    const auto core = std::make_shared<Core>(4321);
+    // usage: node_connector [worker threads], defaults to one per CPU core
+    unsigned threads = std::thread::hardware_concurrency();
+    if (argc > 1) threads = static_cast<unsigned>(std::strtoul(argv[1], nullptr, 10));
+    if (threads == 0) threads = 1;
+
+    const auto core = std::make_shared<Core>(4321, threads);
     if (core->start() != 0) {
         return EXIT_FAILURE;
     }
