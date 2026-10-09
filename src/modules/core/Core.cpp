@@ -6,6 +6,8 @@
 
 #include <iostream>
 
+#include <nlohmann/json.hpp>
+
 Core::Core(const int &port) : _port(port) {
 }
 
@@ -21,24 +23,19 @@ int Core::start() {
         return EXIT_FAILURE;
     }
 
-    // configure and register observer1
-    observer1.incomingPacketHandler = [this](const std::string &clientIP, const char *msg, size_t size) {
-        onIncomingMsg1(clientIP, msg, size);
+    // single observer: parse each packet once, then dispatch per request.
+    // (multiple observers with wantedIP "" would all receive the same bytes
+    // and append them to the same per-client buffer more than once)
+    observer.incomingPacketHandler = [this](const std::string &clientIP, const char *msg, size_t size) {
+        for (const Request &req : parseRequests(clientIP, msg, size)) {
+            onIncomingRequest(req);
+        }
     };
-    observer1.disconnectionHandler = [this](const std::string &ip, const std::string &msg) {
+    observer.disconnectionHandler = [this](const std::string &ip, const std::string &msg) {
         onClientDisconnected(ip, msg);
     };
-    observer1.wantedIP = "";
-    server.subscribe(observer1);
-
-    // configure and register observer2
-    observer2.incomingPacketHandler = [this](const std::string &clientIP, const char *msg, size_t size) {
-        onIncomingMsg2(clientIP, msg, size);
-    };
-    observer2.disconnectionHandler = nullptr;
-    // nullptr or not setting this means we don't care about disconnection event
-    observer2.wantedIP = ""; // use empty string instead to receive messages from any IP address
-    server.subscribe(observer2);
+    observer.wantedIP = ""; // empty string receives messages from any IP address
+    server.subscribe(observer);
 
     _running = true;
     _acceptThread = std::thread(&Core::acceptLoop, this);
@@ -60,25 +57,72 @@ void Core::acceptClient() {
     }
 }
 
-// observer callback. will be called for every new message received by clients
-// with the requested IP address
-void Core::onIncomingMsg1(const std::string &clientIP, const char * msg, size_t size) {
-    std::string msgStr = msg;
-    // print client message
-    std::cout << "Observer1 got client msg: " << msgStr << "\n";
+std::vector<Request> Core::parseRequests(const std::string &clientIP, const char *msg, size_t size) {
+    std::vector<Request> out;
+
+    std::lock_guard<std::mutex> lock(buffersMutex_);
+    std::string &buf = buffers_[clientIP];
+    buf.append(msg, size);
+
+    // Guard against a client that never sends a newline
+    constexpr size_t kMaxBuffer = 1 << 20;   // 1 MB
+    if (buf.size() > kMaxBuffer) {
+        std::cerr << "Buffer overflow from " << clientIP << ", dropping data\n";
+        buf.clear();
+        return out;
+    }
+
+    size_t pos;
+    while ((pos = buf.find('\n')) != std::string::npos) {
+        std::string line = buf.substr(0, pos);
+        buf.erase(0, pos + 1);
+
+        if (line.empty()) continue;
+        if (line.back() == '\r') line.pop_back();   // tolerate \r\n
+
+        try {
+            out.push_back(nlohmann::json::parse(line).get<Request>());
+        }
+        catch (const nlohmann::json::exception &e) {
+            std::cerr << "Bad request from " << clientIP << ": " << e.what() << "\n";
+        }
+        catch (const std::invalid_argument &e) {
+            std::cerr << "Invalid command from " << clientIP << ": " << e.what() << "\n";
+        }
+    }
+    return out;   // anything after the last '\n' stays in buf for next time
 }
 
-// observer callback. will be called for every new message received by clients
-// with the requested IP address
-void Core::onIncomingMsg2(const std::string &clientIP, const char * msg, size_t size) {
-    std::string msgStr = msg;
-    // print client message
-    std::cout << "Observer2 got client msg: " << msgStr << "\n";
+void Core::onIncomingRequest(const Request &req) {
+    switch (req.command()) {
+        case Command::Add:
+        case Command::Update:
+            onIncomingUpdateMsg(req);
+            break;
+        case Command::Delete:
+            onIncomingDeleteMsg(req);
+            break;
+        default:
+            std::cerr << "Unhandled command for key: " << req.key() << "\n";
+            break;
+    }
+}
+
+void Core::onIncomingUpdateMsg(const Request &req) {
+    std::cout << "Update Query: " << req.key() << " = " << req.value() << "\n";
+    _store.add_record(req.key(), req.value());
+}
+
+void Core::onIncomingDeleteMsg(const Request &req) {
+    std::cout << "Delete Query: " << req.key() << "\n";
+    _store.delete_record(req.key());
 }
 
 // observer callback. will be called when client disconnects
 void Core::onClientDisconnected(const std::string &ip, const std::string &msg) {
     std::cout << "Client: " << ip << " disconnected. Reason: " << msg << "\n";
+    std::lock_guard<std::mutex> lock(buffersMutex_);
+    buffers_.erase(ip);
 }
 
 void Core::acceptLoop() {

@@ -59,7 +59,7 @@ void Client::receiveTask() {
         }
 
         char receivedMessage[MAX_PACKET_SIZE];
-        const size_t numOfBytesReceived = recv(_sockfd.get(), receivedMessage, MAX_PACKET_SIZE, 0);
+        const ssize_t numOfBytesReceived = recv(_sockfd.get(), receivedMessage, MAX_PACKET_SIZE, 0);
 
         if(numOfBytesReceived < 1) {
             const bool clientClosedConnection = (numOfBytesReceived == 0);
@@ -73,7 +73,7 @@ void Client::receiveTask() {
             publishEvent(ClientEvent::DISCONNECTED, disconnectionMessage);
             return;
         } else {
-            publishEvent(ClientEvent::INCOMING_MSG, receivedMessage);
+            publishEvent(ClientEvent::INCOMING_MSG, std::string(receivedMessage, numOfBytesReceived));
         }
     }
 }

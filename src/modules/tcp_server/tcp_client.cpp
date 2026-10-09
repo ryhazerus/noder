@@ -127,7 +127,7 @@ void TcpClient::receiveTask() {
         }
 
         char msg[MAX_PACKET_SIZE];
-        const size_t numOfBytesReceived = recv(_sockfd.get(), msg, MAX_PACKET_SIZE, 0);
+        const ssize_t numOfBytesReceived = recv(_sockfd.get(), msg, MAX_PACKET_SIZE, 0);
 
         if(numOfBytesReceived < 1) {
             std::string errorMsg;

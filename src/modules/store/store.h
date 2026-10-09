@@ -10,7 +10,7 @@
 namespace iron {
     class store {
     private:
-        std::unordered_map<std::string, std::string> store_;
+        std::unordered_map<std::string, std::string> kvStore_;
 
     public:
         store();

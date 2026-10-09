@@ -4,15 +4,15 @@
 
 #include "store.h"
 
-iron::store::store() : store_() {
+iron::store::store() : kvStore_() {
 }
 
 void iron::store::add_record(const std::string &key, const std::string &value) {
-    this->store_[key] = value;
+    this->kvStore_[key] = value;
 }
 
 void iron::store::delete_record(const std::string &key) {
-    this->store_.erase(key);
+    this->kvStore_.erase(key);
 }
 
 iron::store::~store() {
