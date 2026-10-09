@@ -7,7 +7,7 @@
 
 #include "../tcp_server/tcp_server.h"
 
-class core {
+class Core {
 private:
 
     // TCP server configurations
@@ -17,7 +17,7 @@ private:
 
 
 public:
-    core(const int &port);
+    Core(const int &port);
 
     int start();
     void acceptClient();
@@ -25,8 +25,7 @@ public:
     void onIncomingMsg1(const std::string &clientIP, const char * msg, size_t size);
     void onClientDisconnected(const std::string &ip, const std::string &msg);
 
-
-    ~core();
+    ~Core();
 };
 
 

@@ -21,7 +21,7 @@ add_executable(node_connector src/main.cpp
         src/modules/tcp_server/tcp_client.cpp
         src/modules/tcp_server/tcp_client.h
         src/modules/tcp_server/client_observer.h
-        src/modules/core/core.cpp
-        src/modules/core/core.h)
+        src/modules/core/Core.cpp
+        src/modules/core/Core.h)
 
 

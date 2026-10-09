@@ -2,15 +2,15 @@
 // Created by zahyrseferina on 10/9/26.
 //
 
-#include "core.h"
+#include "Core.h"
 
 #include <iostream>
 
-core::core(const int &port) : _port(port) {
+Core::Core(const int &port) : _port(port) {
 }
 
 
-int core::start() {
+int Core::start() {
     // start server on given port
     auto start_result = server.start(this->_port);
 
@@ -20,7 +20,6 @@ int core::start() {
         std::cout << "Server started failed " << std::endl;
         return EXIT_FAILURE;
     }
-
 
     // configure and register observer1
     observer1.incomingPacketHandler = [this](const std::string &clientIP, const char *msg, size_t size) {
@@ -50,7 +49,7 @@ int core::start() {
 // accept a single client.
 // if we wish to accept multiple clients, call this function in a loop
 // (you might want to use a thread to accept clients without blocking)
-void core::acceptClient() {
+void Core::acceptClient() {
     try {
         std::cout << "waiting for incoming client...\n";
         std::string clientIP = server.acceptClient(0);
@@ -64,7 +63,7 @@ void core::acceptClient() {
 
 // observer callback. will be called for every new message received by clients
 // with the requested IP address
-void core::onIncomingMsg1(const std::string &clientIP, const char * msg, size_t size) {
+void Core::onIncomingMsg1(const std::string &clientIP, const char * msg, size_t size) {
     std::string msgStr = msg;
     // print client message
     std::cout << "Observer1 got client msg: " << msgStr << "\n";
@@ -72,17 +71,17 @@ void core::onIncomingMsg1(const std::string &clientIP, const char * msg, size_t 
 
 // observer callback. will be called for every new message received by clients
 // with the requested IP address
-void core::onIncomingMsg2(const std::string &clientIP, const char * msg, size_t size) {
+void Core::onIncomingMsg2(const std::string &clientIP, const char * msg, size_t size) {
     std::string msgStr = msg;
     // print client message
     std::cout << "Observer2 got client msg: " << msgStr << "\n";
 }
 
 // observer callback. will be called when client disconnects
-void core::onClientDisconnected(const std::string &ip, const std::string &msg) {
+void Core::onClientDisconnected(const std::string &ip, const std::string &msg) {
     std::cout << "Client: " << ip << " disconnected. Reason: " << msg << "\n";
 }
 
-core::~core() {
+Core::~Core() {
     server.close();
 }
