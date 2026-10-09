@@ -3,6 +3,11 @@ project(node_connector)
 
 set(CMAKE_CXX_STANDARD 26)
 
+# default to an optimized build; an unoptimized build runs at about half the speed
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
 include(FetchContent)
 FetchContent_Declare(json
         URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz

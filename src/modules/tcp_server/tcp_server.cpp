@@ -2,6 +2,7 @@
 #include <functional>
 #include <thread>
 #include <algorithm>
+#include <netinet/tcp.h>
 
 #include "tcp_server.h"
 #include "common.h"
@@ -201,6 +202,11 @@ std::string tcp_server::acceptClient(uint timeout) {
     if (acceptFailed) {
         throw std::runtime_error(strerror(errno));
     }
+
+    // disable Nagle's algorithm: otherwise a small reply sent while a previous one is still
+    // unacknowledged waits for the client's delayed ACK (~40ms)
+    const int noDelay = 1;
+    setsockopt(fileDescriptor, IPPROTO_TCP, TCP_NODELAY, &noDelay, sizeof(noDelay));
 
     auto newClient = new Client(fileDescriptor);
     newClient->setIp(inet_ntoa(_clientAddress.sin_addr));

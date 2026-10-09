@@ -122,17 +122,23 @@ void Core::onIncomingRequest(const std::string &clientIP, const Request &req) {
 }
 
 void Core::onIncomingUpdateMsg(const Request &req) {
+#ifndef NDEBUG   // per-request logging only in debug builds, it is costly at high request rates
     std::cout << "Update Query: " << req.key() << " = " << req.value() << "\n";
+#endif
     _store.add_record(req.key(), req.value());
 }
 
 void Core::onIncomingDeleteMsg(const Request &req) {
+#ifndef NDEBUG   // per-request logging only in debug builds, it is costly at high request rates
     std::cout << "Delete Query: " << req.key() << "\n";
+#endif
     _store.delete_record(req.key());
 }
 
 void Core::onIncomingGetMsg(const std::string &clientIP, const Request &req) {
+#ifndef NDEBUG   // per-request logging only in debug builds, it is costly at high request rates
     std::cout << "Get Query: " << req.key() << "\n";
+#endif
 
     const std::optional<std::string> record = _store.get_record(req.key());
 

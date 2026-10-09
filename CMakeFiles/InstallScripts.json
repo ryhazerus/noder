@@ -1,8 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/home/zahyrseferina/CLionProjects/node-connector/cmake_install.cmake",
-		"/home/zahyrseferina/CLionProjects/node-connector/_deps/json-build/cmake_install.cmake"
-	],
-	"Parallel" : false
-}

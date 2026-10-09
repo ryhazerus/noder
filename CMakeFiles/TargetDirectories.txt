@@ -1,5 +1,0 @@
-/home/zahyrseferina/CLionProjects/node-connector/CMakeFiles/node_connector.dir
-/home/zahyrseferina/CLionProjects/node-connector/CMakeFiles/edit_cache.dir
-/home/zahyrseferina/CLionProjects/node-connector/CMakeFiles/rebuild_cache.dir
-/home/zahyrseferina/CLionProjects/node-connector/_deps/json-build/CMakeFiles/edit_cache.dir
-/home/zahyrseferina/CLionProjects/node-connector/_deps/json-build/CMakeFiles/rebuild_cache.dir
