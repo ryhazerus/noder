@@ -207,14 +207,11 @@ std::string tcp_server::acceptClient(uint timeout) {
 pipe_ret_t tcp_server::waitForClient(uint32_t timeout) {
     if (timeout > 0) {
         const fd_wait::Result waitResult = fd_wait::waitFor(_sockfd, timeout);
-        const bool noIncomingClient = (!FD_ISSET(_sockfd.get(), &_fds));
 
         if (waitResult == fd_wait::Result::FAILURE) {
             return pipe_ret_t::failure(strerror(errno));
         } else if (waitResult == fd_wait::Result::TIMEOUT) {
             return pipe_ret_t::failure("Timeout waiting for client");
-        } else if (noIncomingClient) {
-            return pipe_ret_t::failure("File descriptor is not set");
         }
     }
 

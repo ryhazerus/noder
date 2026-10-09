@@ -28,7 +28,7 @@ int Core::start() {
     observer1.disconnectionHandler = [this](const std::string &ip, const std::string &msg) {
         onClientDisconnected(ip, msg);
     };
-    observer1.wantedIP = "127.0.0.1";
+    observer1.wantedIP = "";
     server.subscribe(observer1);
 
     // configure and register observer2
@@ -37,27 +37,26 @@ int Core::start() {
     };
     observer2.disconnectionHandler = nullptr;
     // nullptr or not setting this means we don't care about disconnection event
-    observer2.wantedIP = "10.88.0.11"; // use empty string instead to receive messages from any IP address
+    observer2.wantedIP = ""; // use empty string instead to receive messages from any IP address
     server.subscribe(observer2);
 
-    this->acceptClient();
-
+    _running = true;
+    _acceptThread = std::thread(&Core::acceptLoop, this);
     return 0;
 }
 
 
-// accept a single client.
-// if we wish to accept multiple clients, call this function in a loop
-// (you might want to use a thread to accept clients without blocking)
 void Core::acceptClient() {
     try {
-        std::cout << "waiting for incoming client...\n";
-        std::string clientIP = server.acceptClient(0);
+        // 1s timeout so the loop wakes up regularly to check _running
+        std::string clientIP = server.acceptClient(1);
         std::cout << "accepted new client with IP: " << clientIP << "\n" <<
                 "== updated list of accepted clients ==" << "\n";
         server.printClients();
     } catch (const std::runtime_error &error) {
-        std::cout << "Accepting client failed: " << error.what() << "\n";
+        if (std::string(error.what()) != "Timeout waiting for client") {
+            std::cout << "Accepting client failed: " << error.what() << "\n";
+        }
     }
 }
 
@@ -82,6 +81,23 @@ void Core::onClientDisconnected(const std::string &ip, const std::string &msg) {
     std::cout << "Client: " << ip << " disconnected. Reason: " << msg << "\n";
 }
 
-Core::~Core() {
+void Core::acceptLoop() {
+    std::cout << "waiting for incoming clients...\n";
+    while (_running) {
+        acceptClient();
+    }
+}
+
+void Core::stop() {
+    if (!_running.exchange(false)) {
+        return; // already stopped, or never started
+    }
+    if (_acceptThread.joinable()) {
+        _acceptThread.join();
+    }
     server.close();
+}
+
+Core::~Core() {
+    stop();
 }

@@ -14,7 +14,9 @@ private:
     int _port;
     iron::tcp_server server{};
     server_observer_t observer1, observer2;
-
+    std::atomic<bool> _running{false};
+    std::thread _acceptThread;
+    void acceptLoop();
 
 public:
     Core(const int &port);
@@ -24,6 +26,7 @@ public:
     void onIncomingMsg2(const std::string &clientIP, const char * msg, size_t size);
     void onIncomingMsg1(const std::string &clientIP, const char * msg, size_t size);
     void onClientDisconnected(const std::string &ip, const std::string &msg);
+    void stop();
 
     ~Core();
 };
