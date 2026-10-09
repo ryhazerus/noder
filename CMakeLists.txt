@@ -3,6 +3,11 @@ project(node_connector)
 
 set(CMAKE_CXX_STANDARD 26)
 
+include(FetchContent)
+FetchContent_Declare(json
+        URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz)
+FetchContent_MakeAvailable(json)
+
 
 add_executable(node_connector src/main.cpp
         src/modules/store/store.cpp
@@ -22,6 +27,8 @@ add_executable(node_connector src/main.cpp
         src/modules/tcp_server/tcp_client.h
         src/modules/tcp_server/client_observer.h
         src/modules/core/Core.cpp
-        src/modules/core/Core.h)
+        src/modules/core/Core.h
+        src/modules/models/request.cpp
+        src/modules/models/request.h)
 
-
+target_link_libraries(node_connector PRIVATE nlohmann_json::nlohmann_json)
