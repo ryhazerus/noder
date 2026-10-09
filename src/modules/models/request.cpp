@@ -15,7 +15,7 @@ void to_json(nlohmann::json& j, const Request& r) {
 void from_json(const nlohmann::json& j, Request& r) {
     j.at("command").get_to(r.command_);
     if (r.command_ == Command::Invalid)
-        throw std::invalid_argument("Unknown command; expected ADD, UPDATE or DELETE");
+        throw std::invalid_argument("Unknown command; expected ADD, GET, UPDATE or DELETE");
     j.at("key").get_to(r.key_);
-    j.at("value").get_to(r.value_);
+    r.value_ = j.value("value", "");   // optional for GET / DELETE
 }

@@ -39,11 +39,13 @@ public:
 
     void acceptClient();
 
-    void onIncomingRequest(const Request &req);
+    void onIncomingRequest(const std::string &clientIP, const Request &req);
 
      void onIncomingUpdateMsg(const Request &req);
 
      void onIncomingDeleteMsg(const Request &req);
+
+    void onIncomingGetMsg(const std::string &clientIP, const Request &req);
 
     void onClientDisconnected(const std::string &ip, const std::string &msg);
 

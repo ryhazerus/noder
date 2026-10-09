@@ -28,7 +28,7 @@ int Core::start() {
     // and append them to the same per-client buffer more than once)
     observer.incomingPacketHandler = [this](const std::string &clientIP, const char *msg, size_t size) {
         for (const Request &req : parseRequests(clientIP, msg, size)) {
-            onIncomingRequest(req);
+            onIncomingRequest(clientIP, req);
         }
     };
     observer.disconnectionHandler = [this](const std::string &ip, const std::string &msg) {
@@ -93,7 +93,7 @@ std::vector<Request> Core::parseRequests(const std::string &clientIP, const char
     return out;   // anything after the last '\n' stays in buf for next time
 }
 
-void Core::onIncomingRequest(const Request &req) {
+void Core::onIncomingRequest(const std::string &clientIP, const Request &req) {
     switch (req.command()) {
         case Command::Add:
         case Command::Update:
@@ -101,6 +101,9 @@ void Core::onIncomingRequest(const Request &req) {
             break;
         case Command::Delete:
             onIncomingDeleteMsg(req);
+            break;
+        case Command::Get:
+            onIncomingGetMsg(clientIP, req);
             break;
         default:
             std::cerr << "Unhandled command for key: " << req.key() << "\n";
@@ -116,6 +119,27 @@ void Core::onIncomingUpdateMsg(const Request &req) {
 void Core::onIncomingDeleteMsg(const Request &req) {
     std::cout << "Delete Query: " << req.key() << "\n";
     _store.delete_record(req.key());
+}
+
+void Core::onIncomingGetMsg(const std::string &clientIP, const Request &req) {
+    std::cout << "Get Query: " << req.key() << "\n";
+
+    const std::optional<std::string> record = _store.get_record(req.key());
+
+    nlohmann::json response{
+        {"command", Command::Get},
+        {"key",     req.key()},
+        {"found",   record.has_value()},
+        {"value",   record ? nlohmann::json(*record) : nlohmann::json(nullptr)}
+    };
+
+    // newline-delimited, same framing as incoming requests
+    const std::string payload = response.dump() + "\n";
+
+    auto sendResult = server.sendToClient(clientIP, payload.data(), payload.size());
+    if (!sendResult.isSuccessful()) {
+        std::cerr << "Failed to send GET response to " << clientIP << ": " << sendResult.message() << "\n";
+    }
 }
 
 // observer callback. will be called when client disconnects

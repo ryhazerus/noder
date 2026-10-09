@@ -7,6 +7,7 @@
 enum class Command {
     Invalid,   // must be first: nlohmann uses the first entry for unknown strings
     Add,
+    Get,
     Update,
     Delete
 };
@@ -14,6 +15,7 @@ enum class Command {
 NLOHMANN_JSON_SERIALIZE_ENUM(Command, {
     {Command::Invalid, nullptr},
     {Command::Add,     "ADD"},
+    {Command::Get,     "GET"},
     {Command::Update,  "UPDATE"},
     {Command::Delete,  "DELETE"},
 })
