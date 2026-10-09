@@ -49,7 +49,7 @@ namespace iron {
         tcp_server();
         ~tcp_server();
 
-        pipe_ret_t start(int port, int maxNumOfClients =5, bool removeDeadClientsAutomatically = true);
+        pipe_ret_t start(int port, int maxNumOfClients = SOMAXCONN, bool removeDeadClientsAutomatically = true);
         void initializeSocket();
         void bindAddress(int port);
         void listenToClients(int maxNumOfClients);

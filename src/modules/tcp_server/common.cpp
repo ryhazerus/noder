@@ -2,30 +2,28 @@
 #include "file_descriptor.h"
 #include "common.h"
 
-#include <sys/select.h>
-
-#define SELECT_FAILED -1
-#define SELECT_TIMEOUT 0
+#include <cerrno>
+#include <poll.h>
 
 namespace fd_wait {
     /**
      * monitor file descriptor and wait for I/O operation
      */
     Result waitFor(const FileDescriptor &fileDescriptor, uint32_t timeoutSeconds) {
-        struct timeval tv;
-        tv.tv_sec = timeoutSeconds;
-        tv.tv_usec = 0;
-        fd_set fds;
+        // poll instead of select: select's fd_set only holds fds below 1024 (FD_SETSIZE),
+        // so it fails once the server has ~1000 connections open
+        pollfd pfd{};
+        pfd.fd = fileDescriptor.get();
+        pfd.events = POLLIN;
+        const int pollRet = poll(&pfd, 1, static_cast<int>(timeoutSeconds * 1000));
 
-        FD_ZERO(&fds);
-        FD_SET(fileDescriptor.get(), &fds);
-        const int selectRet = select(fileDescriptor.get() + 1, &fds, nullptr, nullptr, &tv);
-
-        if (selectRet == SELECT_FAILED) {
-            return Result::FAILURE;
-        } else if (selectRet == SELECT_TIMEOUT) {
+        if (pollRet == -1) {
+            // interrupted by a signal: nothing is wrong, the caller just waits again
+            return errno == EINTR ? Result::TIMEOUT : Result::FAILURE;
+        } else if (pollRet == 0) {
             return Result::TIMEOUT;
         }
+        // POLLIN, or POLLHUP/POLLERR: either way the following recv/accept reports what happened
         return Result::SUCCESS;
     }
 }

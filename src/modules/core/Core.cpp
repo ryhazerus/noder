@@ -47,9 +47,9 @@ void Core::acceptClient() {
     try {
         // 1s timeout so the loop wakes up regularly to check _running
         std::string clientIP = server.acceptClient(1);
-        std::cout << "accepted new client with IP: " << clientIP << "\n" <<
-                "== updated list of accepted clients ==" << "\n";
-        server.printClients();
+        // don't print the full client list here: with n clients that is O(n) output per accept,
+        // which made accepting thousands of connections take minutes
+        std::cout << "accepted new client: " << clientIP << "\n";
     } catch (const std::runtime_error &error) {
         if (std::string(error.what()) != "Timeout waiting for client") {
             std::cout << "Accepting client failed: " << error.what() << "\n";

@@ -53,7 +53,11 @@ void Client::receiveTask() {
         const fd_wait::Result waitResult = fd_wait::waitFor(_sockfd);
 
         if (waitResult == fd_wait::Result::FAILURE) {
-            throw std::runtime_error(strerror(errno));
+            // an exception escaping a thread calls std::terminate and kills the whole server,
+            // so treat a failed wait as this one client disconnecting
+            setConnected(false);
+            publishEvent(ClientEvent::DISCONNECTED, strerror(errno));
+            return;
         } else if (waitResult == fd_wait::Result::TIMEOUT) {
             continue;
         }
