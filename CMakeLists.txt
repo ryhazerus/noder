@@ -20,6 +20,10 @@ add_executable(node_connector src/main.cpp
         src/modules/store/store.h
         src/modules/event_loop/event_server.cpp
         src/modules/event_loop/event_server.h
+        src/modules/protocol/json_protocol.cpp
+        src/modules/protocol/json_protocol.h
+        src/modules/protocol/resp_protocol.cpp
+        src/modules/protocol/resp_protocol.h
         src/modules/core/Core.cpp
         src/modules/core/Core.h
         src/modules/models/request.cpp

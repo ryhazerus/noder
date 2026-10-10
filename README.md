@@ -7,8 +7,13 @@ progress?? huilen. but less than before.
 ## What it does
 
 - TCP server on port `4321`
-- Each request is one line of JSON ending in `\n`
+- Speaks two protocols on the same port. Each connection picks one with its first byte:
+  - **JSON lines** (`{` first): my original protocol
+  - **Redis protocol / RESP** (anything else): so `redis-cli`, `redis-benchmark` and Redis client libraries work
 - Keys and values are stored in memory (they're gone when you stop the server)
+- One `epoll` event loop per CPU core, and the store is split into 64 shards that each have their own lock
+
+### JSON
 
 | command  | example                                          | reply |
 |----------|--------------------------------------------------|-------|
@@ -25,6 +30,19 @@ nc localhost 4321
 {"command":"GET","key":"foo"}
 ```
 
+### Redis protocol
+
+Supported: `GET`, `SET` (no options like `EX`/`NX` yet), `DEL`, `EXISTS`, `MGET`, `MSET`, `PING`, `ECHO`, `DBSIZE`, `FLUSHALL`/`FLUSHDB`.
+There's also just enough `COMMAND`, `CONFIG GET`, `CLIENT` and `SELECT 0` for clients and benchmark tools to connect.
+
+```sh
+redis-cli -p 4321 set foo bar
+redis-cli -p 4321 get foo
+redis-benchmark -p 4321 -t get,set -n 1000000 -c 50 -P 16
+```
+
+Both protocols share the same data, so a key set over RESP can be read over JSON.
+
 ## Building
 
 Needs CMake and a compiler with C++26 support. nlohmann/json is downloaded automatically.
@@ -32,7 +50,8 @@ Needs CMake and a compiler with C++26 support. nlohmann/json is downloaded autom
 ```sh
 cmake -S . -B build          # defaults to a Release build
 cmake --build build
-./build/node_connector
+./build/node_connector       # one worker thread per CPU core
+./build/node_connector 4     # or pick the number of worker threads
 ```
 
 Benchmark with a Release build. A debug build is about 2x slower and also prints every request.
@@ -78,8 +97,12 @@ Peak was 25k ops/s at 1000 connections. It starts struggling around 2000 and bre
 
 ## TODO
 
-- [ ] Reply straight to the client that sent the request (right now every reply searches all clients while holding a global lock)
-- [ ] Replace thread-per-connection with an `epoll` event loop, one thread per core
-- [ ] Build replies without `nlohmann::json`, or switch to the Redis protocol so I can use `redis-benchmark`
-- [ ] Shard the store per thread once that's actually the bottleneck
+- [x] Reply straight to the client that sent the request
+- [x] Replace thread-per-connection with an `epoll` event loop, one thread per core
+- [x] Build replies without `nlohmann::json`, and speak the Redis protocol so I can use `redis-benchmark`
+- [x] Shard the store (64 shards, one lock each)
+- [ ] Benchmark against real Redis/Valkey on the same machine
+- [ ] Shared-nothing: each thread owns its own shard, no locks at all
+- [ ] Flat hash map (`boost::unordered_flat_map`) and check with `perf` whether it matters
+- [ ] `SET` options (`EX`, `NX`, `XX`) and key expiry
 - [ ] Persistence? maybe. one day.

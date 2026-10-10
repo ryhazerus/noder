@@ -7,7 +7,6 @@
 
 #include "../store/store.h"
 #include "../event_loop/event_server.h"
-#include "../models/request.h"
 
 #include <string>
 #include <string_view>
@@ -21,14 +20,8 @@ private:
     iron::store _store{};
     iron::event_server server;
 
-    // one request line in, reply (if any) appended to `out`
-    void handleLine(std::string_view line, std::string &out);
-
-    void onIncomingUpdateMsg(const Request &req);
-
-    void onIncomingDeleteMsg(const Request &req);
-
-    void onIncomingGetMsg(const Request &req, std::string &out);
+    // bytes from one connection in, replies appended to `out`; see event_server::data_handler_t
+    size_t onData(std::string_view input, std::string &out, uint32_t &protocol);
 
 public:
     Core(int port, unsigned threads);

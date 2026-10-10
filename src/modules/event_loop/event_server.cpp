@@ -15,7 +15,7 @@
 
 namespace {
     constexpr size_t kReadChunk = 64 * 1024;
-    constexpr size_t kMaxLineSize = 1 << 20;        // a client that never sends '\n' gets disconnected
+    constexpr size_t kMaxUnconsumedInput = 600 << 20;   // just above the largest request the protocols accept
     constexpr size_t kMaxPendingOutput = 8 << 20;   // stop reading from a client that doesn't read its replies
     constexpr int kMaxEvents = 256;
 
@@ -25,7 +25,7 @@ namespace {
 }
 
 namespace iron {
-    event_server::event_server(line_handler_t handler) : handler_(std::move(handler)) {
+    event_server::event_server(data_handler_t handler) : handler_(std::move(handler)) {
     }
 
     event_server::~event_server() {
@@ -193,27 +193,20 @@ namespace iron {
             return false;               // ECONNRESET etc
         }
 
-        processLines(conn);
+        // the handler walks the whole buffer and we erase the consumed part once;
+        // erasing after every request would move the rest of the buffer each time (O(n^2) when pipelining)
+        const size_t consumed = handler_(conn.in, conn.out, conn.state);
+        if (consumed == kClose) {
+            flush(worker, conn);   // best effort, e.g. to deliver a protocol error message
+            return false;
+        }
+        conn.in.erase(0, consumed);
 
-        if (conn.in.size() > kMaxLineSize) {
-            std::cerr << "line too long, closing connection\n";
+        if (conn.in.size() > kMaxUnconsumedInput) {
+            std::cerr << "request too large, closing connection\n";
             return false;
         }
         return flush(worker, conn);
-    }
-
-    void event_server::processLines(Connection &conn) {
-        // walk the buffer with an offset and erase the consumed part once at the end;
-        // erasing after every line would move the rest of the buffer each time (O(n^2) for pipelined requests)
-        size_t start = 0;
-        size_t newline;
-        while ((newline = conn.in.find('\n', start)) != std::string::npos) {
-            std::string_view line(conn.in.data() + start, newline - start);
-            if (!line.empty() && line.back() == '\r') line.remove_suffix(1);   // tolerate \r\n
-            if (!line.empty()) handler_(line, conn.out);
-            start = newline + 1;
-        }
-        conn.in.erase(0, start);
     }
 
     // send as much pending output as the socket takes; returns false when the connection should be closed

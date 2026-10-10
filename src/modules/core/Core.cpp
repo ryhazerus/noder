@@ -7,11 +7,23 @@
 #include <iostream>
 #include <stdexcept>
 
-#include <nlohmann/json.hpp>
+#include "../protocol/json_protocol.h"
+#include "../protocol/resp_protocol.h"
+
+namespace {
+    // per-connection protocol, kept in the connection's state by the event server
+    enum Protocol : uint32_t {
+        Unknown = 0,
+        Json,
+        Resp,
+    };
+}
 
 Core::Core(int port, unsigned threads)
     : _port(port), _threads(threads),
-      server([this](std::string_view line, std::string &out) { handleLine(line, out); }) {
+      server([this](std::string_view input, std::string &out, uint32_t &protocol) {
+          return onData(input, out, protocol);
+      }) {
 }
 
 int Core::start() {
@@ -26,69 +38,21 @@ int Core::start() {
 }
 
 // runs on a worker thread; several workers call this at the same time
-void Core::handleLine(std::string_view line, std::string &out) {
-    Request req;
-    try {
-        req = nlohmann::json::parse(line).get<Request>();
-    }
-    catch (const nlohmann::json::exception &e) {
-        std::cerr << "Bad request: " << e.what() << "\n";
-        return;
-    }
-    catch (const std::invalid_argument &e) {
-        std::cerr << "Invalid command: " << e.what() << "\n";
-        return;
+size_t Core::onData(std::string_view input, std::string &out, uint32_t &protocol) {
+    if (protocol == Unknown) {
+        // the first real byte tells the protocols apart: JSON requests start with '{',
+        // RESP with '*' (or a plain-text inline command like "PING")
+        const size_t first = input.find_first_not_of(" \t\r\n");
+        if (first == std::string_view::npos) {
+            return input.size();
+        }
+        protocol = input[first] == '{' ? Json : Resp;
     }
 
-    switch (req.command()) {
-        case Command::Add:
-        case Command::Update:
-            onIncomingUpdateMsg(req);
-            break;
-        case Command::Delete:
-            onIncomingDeleteMsg(req);
-            break;
-        case Command::Get:
-            onIncomingGetMsg(req, out);
-            break;
-        default:
-            std::cerr << "Unhandled command for key: " << req.key() << "\n";
-            break;
+    if (protocol == Json) {
+        return iron::json_protocol::process(input, out, _store);
     }
-}
-
-void Core::onIncomingUpdateMsg(const Request &req) {
-#ifndef NDEBUG   // per-request logging only in debug builds, it is costly at high request rates
-    std::cout << "Update Query: " << req.key() << " = " << req.value() << "\n";
-#endif
-    _store.add_record(req.key(), req.value());
-}
-
-void Core::onIncomingDeleteMsg(const Request &req) {
-#ifndef NDEBUG   // per-request logging only in debug builds, it is costly at high request rates
-    std::cout << "Delete Query: " << req.key() << "\n";
-#endif
-    _store.delete_record(req.key());
-}
-
-void Core::onIncomingGetMsg(const Request &req, std::string &out) {
-#ifndef NDEBUG   // per-request logging only in debug builds, it is costly at high request rates
-    std::cout << "Get Query: " << req.key() << "\n";
-#endif
-
-    const std::optional<std::string> record = _store.get_record(req.key());
-
-    nlohmann::json response{
-        {"command", Command::Get},
-        {"key",     req.key()},
-        {"found",   record.has_value()},
-        {"value",   record ? nlohmann::json(*record) : nlohmann::json(nullptr)}
-    };
-
-    // newline-delimited, same framing as incoming requests. The event server sends
-    // everything appended to `out` in one go after the whole batch of requests is handled
-    out += response.dump();
-    out += '\n';
+    return iron::resp_protocol::process(input, out, _store);
 }
 
 void Core::stop() {
