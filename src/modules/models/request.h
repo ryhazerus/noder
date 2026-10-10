@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <utility>
 
 enum class Command {
     Invalid,   // must be first: nlohmann uses the first entry for unknown strings
@@ -31,19 +30,16 @@ private:
 
 public:
     Request() = default;
-    Request(Command c, std::string key, std::string value = "")
-        : command_(c), key_(std::move(key)), value_(std::move(value)) {}
 
     Command            command() const { return command_; }
     const std::string& key()     const { return key_; }
     const std::string& value()   const { return value_; }
     std::optional<int64_t> ttl() const { return ttl_; }
 
-    // Friends so the JSON functions can access the private members
-    friend void to_json(nlohmann::json& j, const Request& r);
+    // Friend so it can fill in the private members
     friend void from_json(const nlohmann::json& j, Request& r);
 };
 
-// Declared at namespace scope too, so they are visible to nlohmann everywhere
-void to_json(nlohmann::json& j, const Request& r);
+// Declared at namespace scope too, so it is visible to nlohmann everywhere.
+// Only the JSON protocol's slow path uses this, for requests its fast parser doesn't handle.
 void from_json(const nlohmann::json& j, Request& r);

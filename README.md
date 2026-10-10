@@ -68,11 +68,13 @@ cmake --build build
 ./build/node_connector 4     # or pick the number of worker threads
 ```
 
-Benchmark with a Release build. A debug build is about 2x slower and also prints every request.
+Benchmark with a Release build. A debug build is about 2x slower.
 
 ## Benchmarks
 
-The load generator is a single-threaded Python script that increases the number of connections step by step. It probably can't push past ~25k ops/s on its own, so the flat part in the middle is likely the script, not the server.
+These are from the old thread-per-connection server, measured with a single-threaded Python script that increases the number of connections step by step.
+That script probably can't push past ~25k ops/s on its own, so the flat part in the middle is likely the script, not the server.
+Numbers for the current epoll version still need to be measured with a proper load generator (`redis-benchmark`, or my Go benchmark).
 
 **First version.** Broke at 10 connections, because all clients from `127.0.0.1` shared one buffer and replies went to the wrong socket.
 
@@ -82,7 +84,7 @@ The load generator is a single-threaded Python script that increases the number 
      10      10      18442      0.0      0.6     1.1       0      0      9 110104  39.80%
 ```
 
-**Now.** Clients are identified by `ip:port`, `TCP_NODELAY` is on, `poll` replaced `select`, and the listen backlog is bigger.
+**Thread-per-connection, fixed up.** Clients are identified by `ip:port`, `TCP_NODELAY` is on, `poll` replaced `select`, and the listen backlog is bigger.
 
 ```
   conns      ok      ops/s   p50 ms   p99 ms  conn s connErr   errs  tmout badGET   fail%
@@ -120,5 +122,5 @@ Peak was 25k ops/s at 1000 connections. It starts struggling around 2000 and bre
 - [ ] Flat hash map (`boost::unordered_flat_map`) and check with `perf` whether it matters
 - [x] Key expiry: `SET EX/PX/KEEPTTL`, `EXPIRE`, `TTL`, `PERSIST`, and `"ttl"` in JSON
 - [ ] `SET NX` / `XX`
-- [ ] Cap how much one client can read per event loop round (one fast client can make its worker's other clients wait)
+- [x] Cap how much one client can read per event loop round (one fast client made its worker's other clients wait)
 - [ ] Persistence? maybe. one day.

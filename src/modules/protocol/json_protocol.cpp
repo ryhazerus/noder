@@ -246,6 +246,36 @@ namespace iron::json_protocol {
             return Command::Invalid;
         }
 
+        // appends `s` as a JSON string (with quotes), escaped exactly like nlohmann::json::dump()
+        void append_string(std::string &out, std::string_view s) {
+            out += '"';
+            // copy runs of characters that need no escaping in one go
+            size_t runStart = 0;
+            for (size_t i = 0; i < s.size(); ++i) {
+                const auto c = static_cast<unsigned char>(s[i]);
+                if (c >= 0x20 && c != '"' && c != '\\') continue;
+
+                out.append(s.data() + runStart, i - runStart);
+                switch (c) {
+                    case '"': out += "\\\""; break;
+                    case '\\': out += "\\\\"; break;
+                    case '\b': out += "\\b"; break;
+                    case '\f': out += "\\f"; break;
+                    case '\n': out += "\\n"; break;
+                    case '\r': out += "\\r"; break;
+                    case '\t': out += "\\t"; break;
+                    default: {
+                        char escaped[7];
+                        std::snprintf(escaped, sizeof(escaped), "\\u%04x", c);
+                        out += escaped;
+                    }
+                }
+                runStart = i + 1;
+            }
+            out.append(s.data() + runStart, s.size() - runStart);
+            out += '"';
+        }
+
         void execute(Command command, std::string_view key, std::string_view value, std::optional<int64_t> ttlSeconds,
                      std::string &out, store &kv) {
             switch (command) {
@@ -305,35 +335,6 @@ namespace iron::json_protocol {
                 std::cerr << "Invalid command: " << e.what() << "\n";
             }
         }
-    }
-
-    void append_string(std::string &out, std::string_view s) {
-        out += '"';
-        // copy runs of characters that need no escaping in one go
-        size_t runStart = 0;
-        for (size_t i = 0; i < s.size(); ++i) {
-            const auto c = static_cast<unsigned char>(s[i]);
-            if (c >= 0x20 && c != '"' && c != '\\') continue;
-
-            out.append(s.data() + runStart, i - runStart);
-            switch (c) {
-                case '"': out += "\\\""; break;
-                case '\\': out += "\\\\"; break;
-                case '\b': out += "\\b"; break;
-                case '\f': out += "\\f"; break;
-                case '\n': out += "\\n"; break;
-                case '\r': out += "\\r"; break;
-                case '\t': out += "\\t"; break;
-                default: {
-                    char escaped[7];
-                    std::snprintf(escaped, sizeof(escaped), "\\u%04x", c);
-                    out += escaped;
-                }
-            }
-            runStart = i + 1;
-        }
-        out.append(s.data() + runStart, s.size() - runStart);
-        out += '"';
     }
 
     size_t process(std::string_view input, std::string &out, store &kv) {

@@ -4,16 +4,6 @@
 
 #include "../store/store.h"
 
-// Serialize: Request -> JSON
-void to_json(nlohmann::json& j, const Request& r) {
-    j = nlohmann::json{
-        {"command", r.command_},
-        {"key",     r.key_},
-        {"value",   r.value_}
-    };
-    if (r.ttl_) j["ttl"] = *r.ttl_;
-}
-
 // Deserialize: JSON -> Request (rejects bad commands)
 void from_json(const nlohmann::json& j, Request& r) {
     j.at("command").get_to(r.command_);

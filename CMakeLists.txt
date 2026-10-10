@@ -30,3 +30,4 @@ add_executable(node_connector src/main.cpp
         src/modules/models/request.h)
 
 target_link_libraries(node_connector PRIVATE nlohmann_json::nlohmann_json)
+target_compile_options(node_connector PRIVATE -Wall -Wextra)

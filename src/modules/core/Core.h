@@ -18,7 +18,7 @@ private:
     // Actual Store
     // Lel this is going to be fun
     iron::store _store{};
-    iron::event_server server;
+    iron::event_server _server;
 
     // bytes from one connection in, replies appended to `out`; see event_server::data_handler_t
     size_t onData(std::string_view input, std::string &out, uint32_t &protocol);

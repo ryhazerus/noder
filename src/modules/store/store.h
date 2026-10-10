@@ -8,7 +8,6 @@
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
-#include <optional>
 #include <random>
 #include <shared_mutex>
 #include <stop_token>
@@ -72,8 +71,6 @@ namespace iron {
         bool delete_record(std::string_view key);
 
         bool contains(std::string_view key) const;
-
-        std::optional<std::string> get_record(std::string_view key) const;
 
         // Calls fn(std::string_view value) while the shard is read-locked, so the value can be
         // written straight into a reply without copying it first. Returns false if the key is missing.

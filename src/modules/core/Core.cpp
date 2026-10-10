@@ -21,14 +21,14 @@ namespace {
 
 Core::Core(int port, unsigned threads)
     : _port(port), _threads(threads),
-      server([this](std::string_view input, std::string &out, uint32_t &protocol) {
+      _server([this](std::string_view input, std::string &out, uint32_t &protocol) {
           return onData(input, out, protocol);
       }) {
 }
 
 int Core::start() {
     try {
-        server.start(_port, _threads);
+        _server.start(_port, _threads);
     } catch (const std::runtime_error &error) {
         std::cout << "Server start failed: " << error.what() << std::endl;
         return EXIT_FAILURE;
@@ -56,7 +56,7 @@ size_t Core::onData(std::string_view input, std::string &out, uint32_t &protocol
 }
 
 void Core::stop() {
-    server.stop();
+    _server.stop();
 }
 
 Core::~Core() {

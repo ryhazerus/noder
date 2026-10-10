@@ -172,7 +172,10 @@ namespace iron {
 
     // returns false when the connection should be closed
     bool event_server::onReadable(Worker &worker, Connection &conn) {
-        // read everything available, then handle all complete lines and send the replies in one go
+        // Read at most one chunk per round, then handle it and send the replies in one go.
+        // Reading until the socket is empty would let one fast client keep the worker busy
+        // while every other connection on it waits. Epoll is level-triggered, so if more data
+        // is waiting it reports this socket again next round, after the others had their turn.
         while (true) {
             // recv straight into the buffer. resize_and_overwrite (C++23) skips the zero-fill
             // that resize() would do on 64KB for every read
@@ -183,10 +186,7 @@ namespace iron {
                 return oldSize + (n > 0 ? static_cast<size_t>(n) : 0);
             });
 
-            if (n > 0) {
-                if (static_cast<size_t>(n) < kReadChunk) break;   // socket drained
-                continue;
-            }
+            if (n > 0) break;
             if (n == 0) return false;   // client closed the connection
             if (errno == EINTR) continue;
             if (errno == EAGAIN || errno == EWOULDBLOCK) break;

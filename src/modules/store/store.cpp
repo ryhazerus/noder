@@ -120,12 +120,6 @@ bool iron::store::contains(std::string_view key) const {
     return read_record(key, [](std::string_view) {});
 }
 
-std::optional<std::string> iron::store::get_record(std::string_view key) const {
-    std::optional<std::string> result;
-    read_record(key, [&](std::string_view value) { result.emplace(value); });
-    return result;
-}
-
 bool iron::store::expire_in(std::string_view key, int64_t ms) {
     Shard &shard = shard_for(key);
     std::unique_lock lock(shard.mutex);
