@@ -11,8 +11,8 @@ namespace iron {
  * A subset of the Redis protocol (RESP2), so redis-cli, redis-benchmark and Redis client
  * libraries can talk to the server.
  *
- * Supported: GET, SET (without options), DEL, EXISTS, MGET, MSET, PING, ECHO, DBSIZE,
- * FLUSHALL/FLUSHDB, plus enough of COMMAND, CONFIG GET, CLIENT, SELECT and QUIT
+ * Supported: GET, SET (with EX, PX or KEEPTTL), DEL, EXISTS, MGET, MSET, EXPIRE, PEXPIRE, TTL, PTTL,
+ * PERSIST, PING, ECHO, DBSIZE, FLUSHALL/FLUSHDB, plus enough of COMMAND, CONFIG GET, CLIENT, SELECT and QUIT
  * for clients and benchmark tools to connect.
  */
 namespace iron::resp_protocol {

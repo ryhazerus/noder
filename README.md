@@ -22,6 +22,9 @@ progress?? huilen. but less than before.
 | `DELETE` | `{"command":"DELETE","key":"foo"}`               | none  |
 | `GET`    | `{"command":"GET","key":"foo"}`                  | `{"command":"GET","found":true,"key":"foo","value":"baz"}` |
 
+`ADD` and `UPDATE` take an optional `"ttl"` in seconds: `{"command":"ADD","key":"foo","value":"bar","ttl":60}`.
+A write without `ttl` makes the key permanent again, the same as a Redis `SET` without options.
+
 You can try it with netcat:
 
 ```sh
@@ -32,7 +35,7 @@ nc localhost 4321
 
 ### Redis protocol
 
-Supported: `GET`, `SET` (no options like `EX`/`NX` yet), `DEL`, `EXISTS`, `MGET`, `MSET`, `PING`, `ECHO`, `DBSIZE`, `FLUSHALL`/`FLUSHDB`.
+Supported: `GET`, `SET` (with `EX`, `PX` or `KEEPTTL`), `DEL`, `EXISTS`, `MGET`, `MSET`, `EXPIRE`, `PEXPIRE`, `TTL`, `PTTL`, `PERSIST`, `PING`, `ECHO`, `DBSIZE`, `FLUSHALL`/`FLUSHDB`.
 There's also just enough `COMMAND`, `CONFIG GET`, `CLIENT` and `SELECT 0` for clients and benchmark tools to connect.
 
 ```sh
@@ -42,6 +45,17 @@ redis-benchmark -p 4321 -t get,set -n 1000000 -c 50 -P 16
 ```
 
 Both protocols share the same data, so a key set over RESP can be read over JSON.
+
+### Key expiry (TTL)
+
+Expired keys are removed the same way Redis does it:
+- **Lazy:** a read checks the expiry time, so an expired key is gone immediately. The clock is only read for keys that have a TTL.
+- **Active:** a background thread wakes up every 100ms. Each shard keeps a list of only the keys that have a TTL. The thread samples 20 random keys from that list, deletes the expired ones, and samples again while more than 25% were expired, for at most 10ms per round.
+  It holds a shard's lock for one batch of 20 keys at a time, so requests wait microseconds at most.
+
+With 1M keys expiring at once, request latency and throughput stayed the same as without them (p99 ~0.1ms, 1.4M GET/s pipelined).
+Cleanup runs at roughly 100k keys per second, so memory comes back a few seconds after a large batch expires.
+`DBSIZE` counts expired keys that haven't been cleaned up yet, like Redis.
 
 ## Building
 
@@ -104,5 +118,7 @@ Peak was 25k ops/s at 1000 connections. It starts struggling around 2000 and bre
 - [ ] Benchmark against real Redis/Valkey on the same machine
 - [ ] Shared-nothing: each thread owns its own shard, no locks at all
 - [ ] Flat hash map (`boost::unordered_flat_map`) and check with `perf` whether it matters
-- [ ] `SET` options (`EX`, `NX`, `XX`) and key expiry
+- [x] Key expiry: `SET EX/PX/KEEPTTL`, `EXPIRE`, `TTL`, `PERSIST`, and `"ttl"` in JSON
+- [ ] `SET NX` / `XX`
+- [ ] Cap how much one client can read per event loop round (one fast client can make its worker's other clients wait)
 - [ ] Persistence? maybe. one day.

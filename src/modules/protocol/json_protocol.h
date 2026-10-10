@@ -9,7 +9,8 @@ namespace iron {
 
 /**
  * The original protocol: one JSON object per line.
- *   {"command":"ADD|UPDATE|DELETE|GET","key":"...","value":"..."}
+ *   {"command":"ADD|UPDATE|DELETE|GET","key":"...","value":"...","ttl":60}
+ * "ttl" is optional, in seconds, for ADD/UPDATE. Without it the key never expires.
  * Only GET replies: {"command":"GET","found":true,"key":"...","value":"..."}
  */
 namespace iron::json_protocol {

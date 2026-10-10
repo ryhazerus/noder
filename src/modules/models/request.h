@@ -1,6 +1,8 @@
 #pragma once
 
 #include <nlohmann/json.hpp>
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -25,6 +27,7 @@ private:
     Command     command_ = Command::Invalid;
     std::string key_;
     std::string value_;
+    std::optional<int64_t> ttl_;   // seconds, ADD/UPDATE only
 
 public:
     Request() = default;
@@ -34,6 +37,7 @@ public:
     Command            command() const { return command_; }
     const std::string& key()     const { return key_; }
     const std::string& value()   const { return value_; }
+    std::optional<int64_t> ttl() const { return ttl_; }
 
     // Friends so the JSON functions can access the private members
     friend void to_json(nlohmann::json& j, const Request& r);

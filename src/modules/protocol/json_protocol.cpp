@@ -1,5 +1,6 @@
 #include "json_protocol.h"
 
+#include <charconv>
 #include <cstdint>
 #include <cstdio>
 #include <iostream>
@@ -15,14 +16,16 @@ namespace iron::json_protocol {
     namespace {
         constexpr size_t kMaxLineSize = 1 << 20;   // a client that never sends '\n' gets disconnected
 
-        // Fast path: a tiny parser for the one shape of object we expect, with string values only.
+        // Fast path: a tiny parser for the one shape of object we expect, with string values only
+        // (and a plain integer for "ttl").
         // Strings without escapes become views straight into the receive buffer (no copy, no allocation).
         // Anything else (numbers, null, nesting, invalid JSON) is handed to nlohmann in handle_line,
         // so odd input behaves exactly like before and gets the same error messages.
 
         struct Fields {
             std::string_view command, key, value;
-            bool hasCommand = false, hasKey = false, hasValue = false;
+            int64_t ttl = 0;
+            bool hasCommand = false, hasKey = false, hasValue = false, hasTtl = false;
         };
 
         // only used when a string contains escapes; reused between requests so they keep their capacity
@@ -162,6 +165,16 @@ namespace iron::json_protocol {
             return false;
         }
 
+        // a plain integer like 60; anything else (1.5, 1e3, "60") goes to the slow path
+        bool parse_integer(const char *&p, const char *end, int64_t &value) {
+            const char *digits = (p < end && *p == '-') ? p + 1 : p;
+            if (end - digits > 1 && digits[0] == '0' && digits[1] >= '0' && digits[1] <= '9') return false;   // 007 isn't JSON
+            const auto result = std::from_chars(p, end, value);
+            if (result.ec != std::errc()) return false;
+            p = result.ptr;
+            return p == end || *p == ',' || *p == '}' || *p == ' ' || *p == '\t' || *p == '\r' || *p == '\n';
+        }
+
         bool parse_request(std::string_view line, Fields &fields, Scratch &scratch) {
             const char *p = line.data();
             const char *end = p + line.size();
@@ -183,11 +196,15 @@ namespace iron::json_protocol {
                     if (p == end || *p != ':') return false;
                     ++p;
                     skip_whitespace(p, end);
-                    if (p == end || *p != '"') return false;   // non-string value: leave it to nlohmann
 
                     // a repeated field overwrites the earlier one, same as nlohmann
                     bool ok;
-                    if (name == "command") {
+                    if (name == "ttl") {
+                        ok = parse_integer(p, end, fields.ttl);
+                        fields.hasTtl = true;
+                    } else if (p == end || *p != '"') {
+                        return false;   // other non-string values: leave it to nlohmann
+                    } else if (name == "command") {
                         ok = parse_string(p, end, fields.command, scratch.command);
                         fields.hasCommand = true;
                     } else if (name == "key") {
@@ -229,11 +246,13 @@ namespace iron::json_protocol {
             return Command::Invalid;
         }
 
-        void execute(Command command, std::string_view key, std::string_view value, std::string &out, store &kv) {
+        void execute(Command command, std::string_view key, std::string_view value, std::optional<int64_t> ttlSeconds,
+                     std::string &out, store &kv) {
             switch (command) {
                 case Command::Add:
                 case Command::Update:
-                    kv.add_record(key, value);
+                    // no ttl: the key becomes permanent, also when it had a TTL before (like Redis' SET)
+                    kv.add_record(key, value, ttlSeconds ? Ttl::in_ms(*ttlSeconds * 1000) : Ttl::clear());
                     break;
                 case Command::Delete:
                     kv.delete_record(key);
@@ -265,8 +284,11 @@ namespace iron::json_protocol {
             Fields fields;
             if (parse_request(line, fields, scratch) && fields.hasCommand && fields.hasKey) {
                 const Command command = to_command(fields.command);
-                if (command != Command::Invalid) {
-                    execute(command, fields.key, fields.hasValue ? fields.value : std::string_view{}, out, kv);
+                // an out-of-range ttl goes to the slow path too, which reports the error
+                const bool ttlValid = !fields.hasTtl || (fields.ttl > 0 && fields.ttl <= store::kMaxTtlMs / 1000);
+                if (command != Command::Invalid && ttlValid) {
+                    const std::optional<int64_t> ttl = fields.hasTtl ? std::optional(fields.ttl) : std::nullopt;
+                    execute(command, fields.key, fields.hasValue ? fields.value : std::string_view{}, ttl, out, kv);
                     return;
                 }
             }
@@ -274,7 +296,7 @@ namespace iron::json_protocol {
             // slow path: whatever the fast parser doesn't handle, including all the error cases
             try {
                 const Request req = nlohmann::json::parse(line).get<Request>();
-                execute(req.command(), req.key(), req.value(), out, kv);
+                execute(req.command(), req.key(), req.value(), req.ttl(), out, kv);
             }
             catch (const nlohmann::json::exception &e) {
                 std::cerr << "Bad request: " << e.what() << "\n";

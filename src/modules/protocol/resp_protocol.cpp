@@ -170,6 +170,64 @@ namespace iron::resp_protocol {
             out += "'\r\n";
         }
 
+        // a whole argument as a 64-bit integer, like Redis' string2ll
+        bool parse_int64(std::string_view text, int64_t &value) {
+            const auto result = std::from_chars(text.data(), text.data() + text.size(), value);
+            return result.ec == std::errc() && result.ptr == text.data() + text.size();
+        }
+
+        // SET key value [EX seconds | PX milliseconds | KEEPTTL]
+        void execute_set(const std::vector<std::string_view> &args, std::string &out, store &kv) {
+            const size_t argc = args.size();
+            if (argc < 3) return append_wrong_args(out, "set");
+
+            Ttl ttl = Ttl::clear();
+            bool ttlGiven = false;   // EX, PX and KEEPTTL exclude each other
+            for (size_t i = 3; i < argc; ++i) {
+                const std::string_view option = args[i];
+                const bool seconds = is(option, "ex");
+                if (seconds || is(option, "px")) {
+                    if (ttlGiven || i + 1 >= argc) return append_error(out, "ERR syntax error");
+                    int64_t amount;
+                    if (!parse_int64(args[++i], amount)) {
+                        return append_error(out, "ERR value is not an integer or out of range");
+                    }
+                    const int64_t limit = seconds ? store::kMaxTtlMs / 1000 : store::kMaxTtlMs;
+                    if (amount <= 0 || amount > limit) {
+                        return append_error(out, "ERR invalid expire time in 'set' command");
+                    }
+                    ttl = Ttl::in_ms(seconds ? amount * 1000 : amount);
+                    ttlGiven = true;
+                } else if (is(option, "keepttl")) {
+                    if (ttlGiven) return append_error(out, "ERR syntax error");
+                    ttl = Ttl::keep();
+                    ttlGiven = true;
+                } else {
+                    return append_error(out, "ERR syntax error");   // NX, XX, GET, ... aren't supported
+                }
+            }
+
+            kv.add_record(args[1], args[2], ttl);
+            append_simple(out, "OK");
+        }
+
+        // EXPIRE key seconds / PEXPIRE key milliseconds
+        void execute_expire(const std::vector<std::string_view> &args, std::string &out, store &kv, bool seconds) {
+            const std::string_view name = seconds ? "expire" : "pexpire";
+            if (args.size() != 3) return append_wrong_args(out, name);
+            int64_t amount;
+            if (!parse_int64(args[2], amount)) return append_error(out, "ERR value is not an integer or out of range");
+            if (amount > (seconds ? store::kMaxTtlMs / 1000 : store::kMaxTtlMs)) {
+                out += "-ERR invalid expire time in '";
+                out += name;
+                out += "' command\r\n";
+                return;
+            }
+            // zero or negative deletes the key, like Redis
+            const int64_t ms = amount <= 0 ? 0 : (seconds ? amount * 1000 : amount);
+            append_integer(out, kv.expire_in(args[1], ms) ? 1 : 0);
+        }
+
         void execute(const std::vector<std::string_view> &args, std::string &out, store &kv) {
             const std::string_view command = args[0];
             const size_t argc = args.size();
@@ -180,10 +238,7 @@ namespace iron::resp_protocol {
                 const bool found = kv.read_record(args[1], [&](std::string_view value) { append_bulk(out, value); });
                 if (!found) append_null(out);
             } else if (is(command, "set")) {
-                if (argc < 3) return append_wrong_args(out, "set");
-                if (argc > 3) return append_error(out, "ERR SET options (EX, NX, ...) are not supported");
-                kv.add_record(args[1], args[2]);
-                append_simple(out, "OK");
+                execute_set(args, out, kv);
             } else if (is(command, "del")) {
                 if (argc < 2) return append_wrong_args(out, "del");
                 int64_t deleted = 0;
@@ -206,6 +261,19 @@ namespace iron::resp_protocol {
                 if (argc < 3 || argc % 2 == 0) return append_wrong_args(out, "mset");
                 for (size_t i = 1; i < argc; i += 2) kv.add_record(args[i], args[i + 1]);
                 append_simple(out, "OK");
+            } else if (is(command, "expire")) {
+                execute_expire(args, out, kv, true);
+            } else if (is(command, "pexpire")) {
+                execute_expire(args, out, kv, false);
+            } else if (is(command, "ttl") || is(command, "pttl")) {
+                const bool seconds = is(command, "ttl");
+                if (argc != 2) return append_wrong_args(out, seconds ? "ttl" : "pttl");
+                const int64_t ms = kv.ttl_ms(args[1]);
+                // -2 (missing) and -1 (no TTL) are passed through; Redis rounds TTL to the nearest second
+                append_integer(out, ms < 0 || !seconds ? ms : (ms + 500) / 1000);
+            } else if (is(command, "persist")) {
+                if (argc != 2) return append_wrong_args(out, "persist");
+                append_integer(out, kv.persist(args[1]) ? 1 : 0);
             } else if (is(command, "ping")) {
                 if (argc == 1) append_simple(out, "PONG");
                 else if (argc == 2) append_bulk(out, args[1]);
